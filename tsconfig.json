@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+        "lib": [
+            "ES2016",
+            "WebWorker",
+        ],
+        "module": "ES2015",
+        "outDir": "dist",
+        "rootDir": "src",
+        "target": "ES2016",
+        "types": [
+            "@mapeditor/tiled-api"
+        ]
+    },
+}
