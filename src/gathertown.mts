@@ -316,7 +316,7 @@ tiled.registerMapFormat("gather", {
             map.addLayer(bgt);
         }
 
-        let ts = new Tileset();
+        let ts = new Tileset("objects");
         ts.objectAlignment = Tileset.TopLeft;
         let tilesByUrl = {};
         let objects = new ObjectGroup("objects");
