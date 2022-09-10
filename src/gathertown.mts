@@ -198,10 +198,10 @@ tiled.extendMenu("File", [
 ]);
 
 let HTTP_CACHE = {};
-const CACHE_DIR = FileInfo.cleanPath(
-    FileInfo.joinPaths(tiled.extensionsPath, "..", "gather-http-cache")
+const HTTP_CACHE_DIR = FileInfo.cleanPath(
+    FileInfo.joinPaths(cachedir, "http-cache")
 );
-const CACHE_FN = FileInfo.joinPaths(CACHE_DIR, "cache.json");
+const HTTP_CACHE_FN = FileInfo.joinPaths(HTTP_CACHE_DIR, "cache.json");
 const TILE_PX = 32;
 
 function suffixFromHeader(hdr: Uint8Array) {
@@ -262,7 +262,7 @@ function saveImage(url: string): string {
     let buf = req.response;
     let arr = new Uint8Array(buf.slice(0, 4));
     let fn = FileInfo.joinPaths(
-        CACHE_DIR,
+        HTTP_CACHE_DIR,
         pathFromUrl(url) + "." + suffixFromHeader(arr)
     );
     File.makePath(FileInfo.path(fn));
@@ -291,9 +291,9 @@ tiled.registerMapFormat("gather", {
     name: "gather.town map format",
     extension: "json",
     read: (fileName) => {
-        File.makePath(CACHE_DIR);
-        if (File.exists(CACHE_FN)) {
-            HTTP_CACHE = loadJson(CACHE_FN);
+        File.makePath(HTTP_CACHE_DIR);
+        if (File.exists(HTTP_CACHE_FN)) {
+            HTTP_CACHE = loadJson(HTTP_CACHE_FN);
         }
 
         let dirName = FileInfo.joinPaths(
@@ -311,11 +311,8 @@ tiled.registerMapFormat("gather", {
         let bgUrl = mapData["backgroundImagePath"];
         if (bgUrl) {
             let bgFn = saveImage(bgUrl);
-            let bg = new ImageLayer("background");
-            bg.setImage(new Image(bgFn));
-            map.addLayer(bg);
             let [bgts, bgt] = mapChop(new Image(bgFn), TILE_PX, TILE_PX);
-            bgt.name = "background (tiled)";
+            bgts.name = bgt.name = "background";
             map.addLayer(bgt);
         }
 
@@ -351,12 +348,12 @@ tiled.registerMapFormat("gather", {
         let fgUrl = mapData["foregroundImagePath"];
         if (fgUrl) {
             let fgFn = saveImage(fgUrl);
-            let fg = new ImageLayer("foreground");
-            fg.setImage(new Image(fgFn));
-            map.addLayer(fg);
+            let [fgts, fgt] = mapChop(new Image(fgFn), TILE_PX, TILE_PX);
+            fgts.name = fgt.name = "foreground";
+            map.addLayer(fgt);
         }
 
-        dumpJson(HTTP_CACHE, CACHE_FN);
+        dumpJson(HTTP_CACHE, HTTP_CACHE_FN);
 
         return map;
     },
