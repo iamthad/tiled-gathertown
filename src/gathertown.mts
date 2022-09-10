@@ -117,6 +117,11 @@ class GatherIntegration {
             .currentIndexChanged.connect((idx) => {
                 spaceId = spaceIds[idx];
             });
+        dialog.addHeading(
+            "<b>Note:</b><p>Due to API limitations,&nbsp;" +
+                "only spaces you can edit will be visible.</p>",
+            true
+        );
         addOkCancel(dialog);
         dialog.accepted.connect(() => {
             callback(spaceId);
