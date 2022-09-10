@@ -421,20 +421,6 @@ function mapChop(img: Image, tw: number, th: number): [Tileset, TileLayer] {
     });
     uniq = undefined;
 
-    // const tsCols = Math.ceil(Math.sqrt(tiles.length));
-    // const tsRows = Math.ceil(tiles.length / tsCols);
-    // let tsImg = new Image(tsCols * tw, tsRows * th, img.format);
-    // let k = 0;
-    // for (let j = 0; j < tsRows; j++) {
-    //     for (let i = 0; i < tsCols; i++) {
-    //         paste(tsImg, tiles[k++], i * tw, j * th);
-    //     }
-    // }
-    // tiles = undefined;
-    // let set = new Tileset();
-    // set.setTileSize(tw, th);
-    // set.loadFromImage(tsImg);
-    // tsImg = undefined;
     const set = assembleTileset(tiles);
 
     let layer = new TileLayer();
@@ -452,21 +438,3 @@ function mapChop(img: Image, tw: number, th: number): [Tileset, TileLayer] {
 
     return [set, layer];
 }
-
-// function imagesEqual(imgA: Image, imgB: Image): boolean {
-//     if (
-//         imgA.width != imgB.width ||
-//         imgA.height != imgB.height ||
-//         imgA.format != imgB.format
-//     ) {
-//         return false;
-//     }
-//     const bufA = imgA.saveToData("png");
-//     const bufB = imgB.saveToData("png");
-//     if (bufA.byteLength != bufB.byteLength) {
-//         return false;
-//     }
-//     const arrA = new Uint8Array(bufA);
-//     const arrB = new Uint8Array(bufB);
-//     return arrA.every((val, i) => val === bufB[i]);
-// }
