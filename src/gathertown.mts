@@ -144,7 +144,7 @@ tiled.registerAction("ImportFromGather", function (action) {
                 let mapFile = new TextFile(mapFn, TextFile.WriteOnly);
                 mapFile.write(JSON.stringify(mapData));
                 mapFile.commit();
-                tiled.mapFormat("gather").read(mapFn);
+                tiled.open(mapFn);
             });
         });
     });
@@ -153,19 +153,21 @@ tiled.registerAction("ImportFromGather", function (action) {
 {
     let exportToGather = tiled.registerAction(
         "ExportToGather",
-        function (action) {}
+        function (action) {
+            integration.chooseSpace((spaceId: string) => {});
+        }
     );
     exportToGather.text = "Export to Gather...";
-    function updateEnabled(_ = undefined) {
-        exportToGather.enabled = !!tiled.activeAsset?.isTileMap;
-    }
-    updateEnabled();
-
-    tiled.activeAssetChanged.connect(updateEnabled);
+    exportToGather.enabled = false;
+    // function updateEnabled(_ = undefined) {
+    //     exportToGather.enabled = !!tiled.activeAsset?.isTileMap;
+    // }
+    // updateEnabled();
+    // tiled.activeAssetChanged.connect(updateEnabled);
 }
 
 tiled.extendMenu("File", [
-    { action: "ImportFromGather", before: "CloseAll" },
+    { action: "ImportFromGather", before: "Close" },
     { action: "ExportToGather" },
     { separator: true },
 ]);
@@ -177,11 +179,7 @@ const CACHE_DIR = FileInfo.cleanPath(
 const CACHE_FN = FileInfo.joinPaths(CACHE_DIR, "cache.json");
 const TILE_PX = 32;
 
-/**
- *
- * @param {Uint8Array} hdr
- */
-function suffixFromHeader(hdr) {
+function suffixFromHeader(hdr: Uint8Array) {
     if (hdr[0] == 0x89 && hdr[1] == 0x50 && hdr[2] == 0x4e && hdr[3] == 0x47) {
         return "png";
     }
@@ -270,14 +268,12 @@ tiled.registerMapFormat("gather", {
     read: (fileName) => {
         File.makePath(CACHE_DIR);
         if (File.exists(CACHE_FN)) {
-            let cacheFile = new TextFile(CACHE_FN, TextFile.ReadOnly);
-            HTTP_CACHE = JSON.parse(cacheFile.readAll());
-            cacheFile.close();
+            HTTP_CACHE = loadJson(CACHE_FN);
         }
 
         let dirName = FileInfo.joinPaths(
             FileInfo.path(fileName),
-            FileInfo.baseName(fileName) + "_assets"
+            `${FileInfo.baseName(fileName)}_assets`
         );
         File.makePath(dirName);
 
@@ -295,10 +291,13 @@ tiled.registerMapFormat("gather", {
             let bg = new ImageLayer("background");
             bg.setImage(new Image(bgFn));
             map.addLayer(bg);
+            let [bgts, bgt] = mapChop(new Image(bgFn), TILE_PX, TILE_PX);
+            bgt.name = "background (tiled)";
+            map.addLayer(bgt);
         }
 
         let fgUrl = mapData["foregroundImagePath"];
-        if (bgUrl) {
+        if (fgUrl) {
             let fgFn = saveImage(fgUrl);
             let fg = new ImageLayer("foreground");
             fg.setImage(new Image(fgFn));
@@ -340,3 +339,134 @@ tiled.registerMapFormat("gather", {
         return map;
     },
 });
+
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+    const arr = new Uint8Array(buf);
+    const len = arr.byteLength;
+    let bstr = "";
+    for (let i = 0; i < len; i++) {
+        bstr += String.fromCharCode(arr[i]);
+    }
+    return Qt["btoa"](bstr);
+}
+
+function iterRects(
+    img: Image,
+    tileWidth: number,
+    tileHeight: number,
+    callback: (img: Image) => void
+) {
+    const cols = img.width / tileWidth;
+    const rows = img.height / tileHeight;
+    for (let j = 0; j < rows; j++) {
+        for (let i = 0; i < cols; i++) {
+            callback(
+                img.copy(tileWidth * i, tileHeight * j, tileWidth, tileHeight)
+            );
+        }
+    }
+}
+
+function paste(dst: Image, src: Image, x: number, y: number) {
+    const sw = src.width;
+    const sh = src.height;
+    for (let j = 0; j < sh; j++) {
+        for (let i = 0; i < sw; i++) {
+            dst.setPixel(x + i, y + j, src.pixel(i, j));
+        }
+    }
+}
+
+function assembleTileset(tiles: ReadonlyArray<Image>): Tileset {
+    const set = new Tileset();
+
+    const n = tiles.length;
+    if (!n) return set;
+
+    const rows = Math.ceil(Math.sqrt(n));
+    const cols = Math.ceil(n / rows);
+
+    const tw = tiles[0].width;
+    const th = tiles[0].height;
+
+    let img = new Image(cols * tw, rows * th, tiles[0].format);
+
+    let x = 0;
+    let y = 0;
+    for (let i = 0; i < n; i++) {
+        paste(img, tiles[i], x++ * tw, y * th);
+        if (x == cols) {
+            x = 0;
+            y++;
+        }
+    }
+    set.setTileSize(tw, th);
+    set.loadFromImage(img);
+
+    return set;
+}
+
+function mapChop(img: Image, tw: number, th: number): [Tileset, TileLayer] {
+    let uniq = {};
+    let tileRefs: Array<number> = [];
+    let tiles: Array<Image> = [];
+    iterRects(img, tw, th, (img: Image) => {
+        const bstr = arrayBufferToBase64(img.saveToData("png"));
+        if (bstr in uniq) {
+            tileRefs.push(uniq[bstr]);
+        } else {
+            tileRefs.push((uniq[bstr] = tiles.length));
+            tiles.push(img);
+        }
+    });
+    uniq = undefined;
+
+    // const tsCols = Math.ceil(Math.sqrt(tiles.length));
+    // const tsRows = Math.ceil(tiles.length / tsCols);
+    // let tsImg = new Image(tsCols * tw, tsRows * th, img.format);
+    // let k = 0;
+    // for (let j = 0; j < tsRows; j++) {
+    //     for (let i = 0; i < tsCols; i++) {
+    //         paste(tsImg, tiles[k++], i * tw, j * th);
+    //     }
+    // }
+    // tiles = undefined;
+    // let set = new Tileset();
+    // set.setTileSize(tw, th);
+    // set.loadFromImage(tsImg);
+    // tsImg = undefined;
+    const set = assembleTileset(tiles);
+
+    let layer = new TileLayer();
+    const imgCols = (layer.width = img.width / tw);
+    const imgRows = (layer.height = img.height / th);
+    let edit = layer.edit();
+
+    let k = 0;
+    for (let j = 0; j < imgRows; j++) {
+        for (let i = 0; i < imgCols; i++) {
+            edit.setTile(i, j, set.tiles[tileRefs[k++]]);
+        }
+    }
+    edit.apply();
+
+    return [set, layer];
+}
+
+// function imagesEqual(imgA: Image, imgB: Image): boolean {
+//     if (
+//         imgA.width != imgB.width ||
+//         imgA.height != imgB.height ||
+//         imgA.format != imgB.format
+//     ) {
+//         return false;
+//     }
+//     const bufA = imgA.saveToData("png");
+//     const bufB = imgB.saveToData("png");
+//     if (bufA.byteLength != bufB.byteLength) {
+//         return false;
+//     }
+//     const arrA = new Uint8Array(bufA);
+//     const arrB = new Uint8Array(bufB);
+//     return arrA.every((val, i) => val === bufB[i]);
+// }
