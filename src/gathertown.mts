@@ -1,3 +1,38 @@
+const author = "iamthad";
+const extname = "tiled-gathertown";
+var _proc = new Process();
+const homedir = _proc.getEnv("HOME");
+const tmpdir =
+    tiled.platform == "windows"
+        ? _proc.getEnv("TEMP") ||
+          _proc.getEnv("TMP") ||
+          (_proc.getEnv("SystemRoot") || _proc.getEnv("windir")) + "\\temp"
+        : _proc.getEnv("TMPDIR") ||
+          _proc.getEnv("TMP") ||
+          _proc.getEnv("TEMP") ||
+          "/tmp";
+
+const cachedir =
+    tiled.platform == "windows"
+        ? FileInfo.joinPaths(_proc.getEnv("LOCALAPPDATA"), author, extname)
+        : tiled.platform == "macos"
+        ? FileInfo.joinPaths(homedir, "Library", "Caches", extname)
+        : FileInfo.joinPaths(
+              _proc.getEnv("XDG_CACHE_HOME") ||
+                  FileInfo.joinPaths(homedir, ".cache"),
+              extname
+          );
+const configdir =
+    tiled.platform == "windows"
+        ? FileInfo.joinPaths(_proc.getEnv("LOCALAPPDATA"), author, extname)
+        : tiled.platform == "macos"
+        ? FileInfo.joinPaths(homedir, "Library", "Preferences", extname)
+        : FileInfo.joinPaths(
+              _proc.getEnv("XDG_CONFIG_HOME") ||
+                  FileInfo.joinPaths(homedir, ".config"),
+              extname
+          );
+
 class GatherApi {
     key: string;
     baseUrl: string;
