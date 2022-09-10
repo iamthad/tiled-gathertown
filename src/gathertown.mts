@@ -2,16 +2,6 @@ class GatherApi {
     key: string;
     baseUrl: string;
 
-    request(method: string, path: string): any {
-        const req = new XMLHttpRequest();
-        req.open(method, `${this.baseUrl}/${path}`, false);
-        req.setRequestHeader("accept", "application/json");
-        req.setRequestHeader("apiKey", this.key);
-        req.responseType = "json";
-        req.send();
-        return req;
-    }
-
     constructor(
         key: string,
         baseUrl: string = "https://api.gather.town/api/v2"
@@ -28,13 +18,23 @@ class GatherApi {
         }
     }
 
-    getEditableSpaces() {
-        const req = this.request("GET", "users/me/spaces?role=DEFAULT_BUILDER");
+    _request(method: string, path: string): any {
+        const req = new XMLHttpRequest();
+        req.open(method, `${this.baseUrl}/${path}`, false);
+        req.setRequestHeader("accept", "application/json");
+        req.setRequestHeader("apiKey", this.key);
+        req.responseType = "json";
+        req.send();
+        return req;
+    }
+
+    _get(path: string): any {
+        const req = this._request("GET", path);
         if (req.status != 200) {
             throw new Error(
                 [
-                    "Failed to get editable spaces",
-                    `HTTP ${req.status} ${req.status_text}`,
+                    `Failed to GET ${this.baseUrl}/${path}`,
+                    `HTTP ${req.status}`,
                     req.response_text,
                 ].join("; ")
             );
@@ -42,22 +42,21 @@ class GatherApi {
         return req.response;
     }
 
+    getEditableSpaces(): any {
+        return this._get("users/me/spaces?role=DEFAULT_BUILDER");
+    }
+
     getMaps(spaceId: string): any {
-        const req = this.request(
-            "GET",
+        return this._get(
             ["spaces", encodeURIComponent(spaceId), "maps"].join("/")
         );
-        if (req.status != 200) {
-            throw new Error(
-                [
-                    "Failed to get maps",
-                    `HTTP ${req.status} ${req.status_text}`,
-                    req.response_text,
-                ].join("; ")
-            );
-        }
-        return req.response;
     }
+}
+
+function addOkCancel(dialog: Dialog) {
+    dialog.addNewRow();
+    dialog.addButton("OK").clicked.connect(dialog.accept);
+    dialog.addButton("Cancel").clicked.connect(dialog.reject);
 }
 
 class GatherIntegration {
@@ -69,8 +68,7 @@ class GatherIntegration {
         return this._api;
     }
     chooseSpace(callback: (spaceId: string) => void): void {
-        let dialog = new Dialog();
-        dialog.windowTitle = "Choose Space";
+        let dialog = new Dialog("Choose Space");
         let spaceIds: Array<string> = [];
         let spaceLabels: Array<string> = [];
         for (const space of this.api().getEditableSpaces()) {
@@ -84,9 +82,7 @@ class GatherIntegration {
             .currentIndexChanged.connect((idx) => {
                 spaceId = spaceIds[idx];
             });
-        dialog.addNewRow();
-        dialog.addButton("OK").clicked.connect(dialog.accept);
-        dialog.addButton("Cancel").clicked.connect(dialog.reject);
+        addOkCancel(dialog);
         dialog.accepted.connect(() => {
             callback(spaceId);
         });
@@ -94,36 +90,30 @@ class GatherIntegration {
     }
     chooseMap(spaceId: string, callback: (mapData: any) => void): void {
         let maps = this.api().getMaps(spaceId);
-        let dialog = new Dialog();
-        dialog.windowTitle = "Choose Map";
-        let vals = [];
+        let dialog = new Dialog("Choose Map");
+        let mapNames: Array<string> = [];
         for (const m of maps) {
-            vals.push(m.name);
+            mapNames.push(m.name);
         }
         let mapData = maps[0];
         dialog
-            .addComboBox("Map Name", vals)
+            .addComboBox("Map Name", mapNames)
             .currentIndexChanged.connect((idx) => {
                 mapData = maps[idx];
             });
-        dialog.addNewRow();
-        dialog.addButton("OK").clicked.connect(dialog.accept);
-        dialog.addButton("Cancel").clicked.connect(dialog.reject);
+        addOkCancel(dialog);
         dialog.accepted.connect(() => {
             callback(mapData);
         });
         dialog.show();
     }
     chooseOutputDir(callback: (outputDir: string) => void): void {
-        let dialog = new Dialog();
-        let outputDir;
-        dialog.windowTitle = "Choose Output Directory";
+        let dialog = new Dialog("Choose Output Directory");
+        let outputDir: string;
         dialog.addTextInput("Output Directory").textChanged.connect((val) => {
             outputDir = val;
         });
-        dialog.addNewRow();
-        dialog.addButton("OK").clicked.connect(dialog.accept);
-        dialog.addButton("Cancel").clicked.connect(dialog.reject);
+        addOkCancel(dialog);
         dialog.accepted.connect(() => {
             callback(outputDir);
         });
@@ -133,7 +123,7 @@ class GatherIntegration {
 
 var integration = new GatherIntegration();
 
-tiled.registerAction("ImportFromGather", function (action) {
+tiled.registerAction("ImportFromGather", function (_) {
     integration.chooseSpace((spaceId: string) => {
         integration.chooseMap(spaceId, function (mapData: any) {
             integration.chooseOutputDir(function (outputDir: string) {
@@ -153,8 +143,8 @@ tiled.registerAction("ImportFromGather", function (action) {
 {
     let exportToGather = tiled.registerAction(
         "ExportToGather",
-        function (action) {
-            integration.chooseSpace((spaceId: string) => {});
+        function (_action) {
+            integration.chooseSpace((_spaceId: string) => {});
         }
     );
     exportToGather.text = "Export to Gather...";
@@ -280,10 +270,8 @@ tiled.registerMapFormat("gather", {
         let mapData = loadJson(fileName);
 
         let map = new TileMap();
-        map.width = mapData["dimensions"][0];
-        map.height = mapData["dimensions"][1];
-        map.tileWidth = TILE_PX;
-        map.tileHeight = TILE_PX;
+        [map.width, map.height] = mapData.dimensions;
+        map.tileWidth = map.tileHeight = TILE_PX;
 
         let bgUrl = mapData["backgroundImagePath"];
         if (bgUrl) {
@@ -296,30 +284,22 @@ tiled.registerMapFormat("gather", {
             map.addLayer(bgt);
         }
 
-        let fgUrl = mapData["foregroundImagePath"];
-        if (fgUrl) {
-            let fgFn = saveImage(fgUrl);
-            let fg = new ImageLayer("foreground");
-            fg.setImage(new Image(fgFn));
-            map.addLayer(fg);
-        }
-
         let ts = new Tileset();
         ts.objectAlignment = Tileset.TopLeft;
         let tilesByUrl = {};
         let objects = new ObjectGroup("objects");
-        for (let objData of mapData["objects"]) {
-            let object = new MapObject(objData["id"]);
+        for (let objData of mapData.objects ?? []) {
+            let object = new MapObject(objData.id);
             object.pos = Qt.point(
-                objData["x"] * TILE_PX + objData["offsetX"],
-                objData["y"] * TILE_PX + objData["offsetY"]
+                objData.x * TILE_PX + (objData.offsetX ?? 0),
+                objData.y * TILE_PX + (objData.offsetY ?? 0)
             );
             object.size = Qt.size(
-                objData["width"] * TILE_PX,
-                objData["height"] * TILE_PX
+                objData.width * TILE_PX,
+                objData.height * TILE_PX
             );
             let tile: Tile;
-            let objUrl = objData["normal"];
+            const objUrl = objData.normal;
             if (objUrl in tilesByUrl) {
                 tile = tilesByUrl[objUrl];
             } else {
@@ -331,8 +311,15 @@ tiled.registerMapFormat("gather", {
             object.tile = tile;
             objects.addObject(object);
         }
-
         map.addLayer(objects);
+
+        let fgUrl = mapData["foregroundImagePath"];
+        if (fgUrl) {
+            let fgFn = saveImage(fgUrl);
+            let fg = new ImageLayer("foreground");
+            fg.setImage(new Image(fgFn));
+            map.addLayer(fg);
+        }
 
         dumpJson(HTTP_CACHE, CACHE_FN);
 
@@ -340,14 +327,17 @@ tiled.registerMapFormat("gather", {
     },
 });
 
-function arrayBufferToBase64(buf: ArrayBuffer): string {
+function arrayBufferToStr(buf: ArrayBuffer): string {
     const arr = new Uint8Array(buf);
     const len = arr.byteLength;
     let bstr = "";
     for (let i = 0; i < len; i++) {
         bstr += String.fromCharCode(arr[i]);
     }
-    return Qt["btoa"](bstr);
+    return bstr;
+}
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+    return Qt["btoa"](arrayBufferToStr(buf));
 }
 
 function iterRects(
