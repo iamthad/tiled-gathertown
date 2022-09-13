@@ -112,11 +112,10 @@ class GatherIntegration {
             spaceLabels.push(spaceId.split("\\", 2)[1]);
         }
         let spaceId = spaceIds[0];
-        dialog
-            .addComboBox("Space Name", spaceLabels)
-            .currentIndexChanged.connect((idx) => {
-                spaceId = spaceIds[idx];
-            });
+        let snBox = dialog.addComboBox("Space Name", spaceLabels);
+        snBox.currentIndexChanged.connect((_) => {
+            spaceId = spaceIds[snBox.currentIndex];
+        });
         dialog.addHeading(
             "<b>Note:</b><p>Due to API limitations,&nbsp;" +
                 "only spaces you can edit will be visible.</p>",
@@ -136,11 +135,10 @@ class GatherIntegration {
             mapNames.push(m.name);
         }
         let mapData = maps[0];
-        dialog
-            .addComboBox("Map Name", mapNames)
-            .currentIndexChanged.connect((idx) => {
-                mapData = maps[idx];
-            });
+        let mnBox = dialog.addComboBox("Map Name", mapNames);
+        mnBox.currentIndexChanged.connect((_) => {
+            mapData = maps[mnBox.currentIndex];
+        });
         addOkCancel(dialog);
         dialog.accepted.connect(() => {
             callback(mapData);
